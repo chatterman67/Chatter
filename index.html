@@ -1,0 +1,143 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yapper Bot Dashboard</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101116;color:white;font:16px Arial;padding:20px}
+main{max-width:600px;margin:35px auto}
+h1{color:#a78bfa}
+p{color:#aaa}
+input,select,textarea,button{
+width:100%;padding:14px;margin:8px 0;
+border-radius:10px;border:1px solid #333;
+background:#1c1d26;color:white;font-size:16px
+}
+button{background:#8065e9;border:0;font-weight:bold}
+button:disabled{opacity:.5}
+textarea{height:130px;resize:vertical}
+#status{white-space:pre-wrap;color:#b9a7ff}
+</style>
+</head>
+<body>
+<main>
+<h1>Yapper Bot</h1>
+<p>Connect your bot and send messages.</p>
+
+<input id="token" type="password"
+placeholder="Bot token" autocomplete="off">
+
+<button id="connect">Connect bot</button>
+
+<select id="server">
+<option value="">Choose a server</option>
+</select>
+
+<select id="channel">
+<option value="">Choose a channel</option>
+</select>
+
+<textarea id="message"
+maxlength="2000"
+placeholder="Type your message..."></textarea>
+
+<button id="send" disabled>Send message</button>
+<p id="status">Not connected.</p>
+</main>
+
+<script>
+const API="https://www.yapper.website/api/bot/v1";
+const $=id=>document.getElementById(id);
+let token="",servers=[],channels=[];
+
+async function request(path,options={}){
+ const response=await fetch(API+path,{
+  ...options,
+  headers:{
+   Authorization:"Bot "+token,
+   "Content-Type":"application/json",
+   ...options.headers
+  }
+ });
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok)
+  throw Error(data.error||"Request failed: "+response.status);
+ return data;
+}
+
+function options(select,items,placeholder){
+ select.replaceChildren(new Option(placeholder,""));
+ items.forEach(item=>{
+  select.add(new Option(item.name,item.id));
+ });
+}
+
+$("connect").onclick=async()=>{
+ token=$("token").value.trim();
+ if(!token)return $("status").textContent="Enter your bot token.";
+
+ $("connect").disabled=true;
+ $("status").textContent="Connecting...";
+
+ try{
+  const [s,c]=await Promise.all([
+   request("/servers"),
+   request("/channels?type=text")
+  ]);
+
+  servers=Array.isArray(s)?s:(s.servers||[]);
+  channels=Array.isArray(c)?c:(c.channels||[]);
+
+  options($("server"),servers,"Choose a server");
+  options($("channel"),[],"Choose a channel");
+
+  $("status").textContent="Connected. Select a server.";
+  $("send").disabled=false;
+ }catch(e){
+  token="";
+  $("status").textContent="Error: "+e.message;
+ }finally{
+  $("connect").disabled=false;
+ }
+};
+
+$("server").onchange=()=>{
+ const id=$("server").value;
+ const list=channels.filter(c=>c.server_id===id);
+ options($("channel"),list,"Choose a channel");
+};
+
+$("send").onclick=async()=>{
+ const channel=$("channel").value;
+ const content=$("message").value.trim();
+
+ if(!channel||!content){
+  $("status").textContent="Choose a channel and enter a message.";
+  return;
+ }
+
+ $("send").disabled=true;
+ $("status").textContent="Sending...";
+
+ try{
+  await request("/channels/"+encodeURIComponent(channel)+"/messages",{
+   method:"POST",
+   body:JSON.stringify({content})
+  });
+  $("message").value="";
+  $("status").textContent="Message sent.";
+ }catch(e){
+  $("status").textContent="Failed: "+e.message;
+ }finally{
+  $("send").disabled=false;
+ }
+};
+
+window.addEventListener("pagehide",()=>{
+ token="";
+});
+</script>
+</body>
+</html>
